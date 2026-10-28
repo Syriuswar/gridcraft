@@ -8,7 +8,7 @@ Two backends:
 
 | Mode | Command | What it drives |
 |---|---|---|
-| Headless (default) | `gridcraft-cli mcp [--in book.xlsx \| --sample budget]` | An in-process engine session — no window. |
+| Headless (default) | `gridcraft-cli mcp [--in book.xlsx \| --sample budget]` | An in-process engine session — no window. It can be [confined](#confining-an-agent) to folders and commands. |
 | Remote | `gridcraft-cli mcp --connect 7979` | A running app started with `gridcraft --control 7979` (TCP JSON lines on `127.0.0.1`, authenticated with the app's token: it is read from the app's token file or `GRIDCRAFT_CONTROL_TOKEN`, see [`control-protocol.md`](control-protocol.md)). |
 
 ## Claude Code
@@ -34,6 +34,37 @@ JSON config (`.mcp.json`, Claude Desktop, other clients):
 
 Use `"args": ["mcp", "--connect", "7979"]` for the desktop app, or `["mcp", "--in", "/path/book.xlsx"]` to start
 with a file open.
+
+## Confining an agent
+
+A headless server can be held to the folders and commands a task needs:
+
+```sh
+gridcraft-cli mcp --automation-read-root ~/work/in --automation-write-root ~/work/out \
+    --allow-commands 'range.setValues, cell.get, sheet.read, document.inspect, home.*, file.save, file.saveAs'
+```
+
+- `--automation-read-root DIR`: workbooks, CSV imports and every other file a command reads must be inside `DIR`
+  (`--in` too). `--automation-write-root DIR`: saves and exports must land inside `DIR`; a folder that doesn't
+  exist yet is fine. A root left out grants none of its access: with only a read root the agent can't write a
+  file at all. Paths are resolved before they are checked: `..`, symbolic links and junctions that lead out are
+  refused, and so are Windows device names (`NUL`, `COM1`…). Case is ignored on Windows.
+- `--allow-commands LIST`: only the commands listed may run, by id (`home.bold`) or group (`home.*`), separated by
+  commas, spaces or new lines; `#` starts a comment. `@FILE` reads the list from a file, which must be a
+  regular file of at most 256 KiB. A pipe, socket or device found at the first check is refused without being
+  opened; the check and the open are not atomic, so another program that swaps a FIFO in between can still
+  make the open wait for a writer. The read stops at 256 KiB whatever the file claims, and a longer list is
+  refused, never cut short. An unknown id or group, an
+  empty list, or the flag without a value is an error at startup, so a typo never widens or silently narrows
+  the list. The dedicated tools are held to
+  it by the commands they run (`write_range` is `range.setValues`, `format_range` the `home.*` commands it
+  composes, `inspect_workbook` is `document.inspect`, `read_range` is `sheet.read`…), and so are the steps of a
+  stored script: `automate.runScript` refuses a script that holds an unlisted command before any step runs.
+  `list_commands` shows only the commands listed.
+
+A refused path or command is a tool error (`isError: true`) naming what was refused; nothing is read or written.
+Each flag may be given once, any problem with them stops the server at startup, and they are an error with
+`--connect`: a running app is not confined by them.
 
 ## Tools
 

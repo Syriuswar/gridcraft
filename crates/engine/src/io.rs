@@ -613,6 +613,7 @@ const MAX_READ_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 pub fn read_file(path: &str) -> Result<Vec<u8>> {
     use std::io::Read;
     script_sandbox_check(path)?;
+    crate::automation::check_read(path)?;
     let f = std::fs::File::open(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
     // A symlink to an endless device reports length 0 but streams forever, so metadata
     // alone never bounds the read: require a real file and cap the bytes actually taken.
@@ -638,6 +639,7 @@ pub fn read_file(path: &str) -> Result<Vec<u8>> {
 pub fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
     use std::io::Write;
     script_sandbox_check(path)?;
+    crate::automation::check_write(path)?;
     // Write to a temporary file, then rename: a crash never leaves a half-written workbook.
     // The temporary file is created exclusively, so an existing file or symlink at that
     // path (planted by another local user) makes the save fail instead of truncating the
