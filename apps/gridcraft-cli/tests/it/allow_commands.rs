@@ -19,6 +19,7 @@ fn refused(args: &[&str], needle: &str) {
     assert!(!stderr.contains("MCP server on stdio"), "{args:?} served: {stderr}");
 }
 
+/// A flag without its value, or given twice, never starts the server.
 #[test]
 fn a_flag_without_its_value_never_starts_the_server() {
     refused(&["mcp", "--allow-commands"], "needs a value");
@@ -28,6 +29,7 @@ fn a_flag_without_its_value_never_starts_the_server() {
     refused(&["mcp", "--allow-commands", "home.*", "--allow-commands", "cell.set"], "given twice");
 }
 
+/// `--connect` before or after the flag doesn't get past the checks.
 #[test]
 fn connect_is_not_a_way_around_the_checks() {
     refused(&["mcp", "--connect", "7979", "--allow-commands"], "needs a value");
@@ -35,6 +37,7 @@ fn connect_is_not_a_way_around_the_checks() {
     refused(&["mcp", "--connect", "7979", "--allow-commands", "home.*"], "running app is not confined");
 }
 
+/// Unknown ids and malformed patterns stop the server at startup.
 #[test]
 fn unknown_commands_and_patterns_are_refused() {
     refused(&["mcp", "--allow-commands", "cell.sett"], "unknown command");
@@ -43,6 +46,7 @@ fn unknown_commands_and_patterns_are_refused() {
     refused(&["mcp", "--allow-commands", "home*"], "--allow-commands");
 }
 
+/// An oversized `@FILE`, a folder, `/dev/zero` and a FIFO are refused without blocking.
 #[test]
 fn oversized_and_streamed_list_files_are_refused() {
     let dir = std::env::temp_dir().join(format!("gridcraft-it-allowlist-{}", std::process::id()));
@@ -65,6 +69,7 @@ fn oversized_and_streamed_list_files_are_refused() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A good `@FILE` list starts the server held to it.
 #[test]
 fn a_good_list_starts_the_server_held_to_it() {
     let dir = std::env::temp_dir().join(format!("gridcraft-it-allowlist-ok-{}", std::process::id()));

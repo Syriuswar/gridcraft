@@ -132,14 +132,17 @@ impl Automation {
         Ok(Some(Self { read_root, write_root, confined, commands }))
     }
 
+    /// The folder files may be read from, resolved; `None`: no reading at all.
     pub fn read_root(&self) -> Option<&Path> {
         self.read_root.as_deref()
     }
 
+    /// The folder files may be written to, resolved; `None`: no writing at all.
     pub fn write_root(&self) -> Option<&Path> {
         self.write_root.as_deref()
     }
 
+    /// The commands that may run; `None`: every command.
     pub fn commands(&self) -> Option<&CommandAllowlist> {
         self.commands.as_ref()
     }
@@ -174,12 +177,17 @@ impl Automation {
             }
             Access::Write => {
                 // The entry is written by name: its folder (links followed) and name must be
-                // inside, and so must whatever an existing entry there leads to.
+                // inside, and so must whatever an existing entry there leads to. The root itself
+                // is not a file to write: a save writes a temporary sibling (`NAME.sctmp`) next
+                // to its destination first, and next to the root that sibling is outside it.
                 let name = absolute.file_name().ok_or_else(|| reject("not a file name"))?;
                 let parent = absolute.parent().ok_or_else(|| reject("no folder"))?;
                 let folder = resolve(parent).ok_or_else(|| reject("cannot resolve"))?;
-                if !inside(root, &folder.join(name)) {
+                if !strictly_inside(root, &folder.join(name)) {
                     return Err(outside());
+                }
+                if std::fs::metadata(&absolute).is_ok_and(|m| m.is_dir()) {
+                    return Err(reject("a folder is not a file to write"));
                 }
                 if std::fs::symlink_metadata(&absolute).is_ok() {
                     let target = std::fs::canonicalize(&absolute).map_err(|_| reject("a link that leads nowhere"))?;
@@ -237,6 +245,11 @@ fn inside(root: &Path, path: &Path) -> bool {
     }
 }
 
+/// `path` is inside `root` and is not `root` itself.
+fn strictly_inside(root: &Path, path: &Path) -> bool {
+    inside(root, path) && path.components().count() > root.components().count()
+}
+
 /// `path` without Windows' `\\?\` prefix, for people to read.
 fn plain(path: &Path) -> PathBuf {
     let text = path.to_string_lossy();
@@ -246,6 +259,8 @@ fn plain(path: &Path) -> PathBuf {
     }
 }
 
+/// Whether `name` is a Windows reserved device name (`NUL`, `con.xlsx`, `COM1`…), with or without
+/// an extension: writing "to" one reaches a device, not a file in the folder.
 fn is_device_name(name: &str) -> bool {
     let stem = name.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
     matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$")
@@ -270,6 +285,7 @@ pub fn confine_process(automation: Arc<Automation>) -> bool {
 struct Restore(Option<Arc<Automation>>);
 
 impl Drop for Restore {
+    /// Put the thread's previous automation (or none) back in force.
     fn drop(&mut self) {
         let previous = self.0.take();
         let _ = SCOPE.try_with(|s| *s.borrow_mut() = previous);

@@ -27,12 +27,14 @@ fn folders(tag: &str) -> PathBuf {
     base
 }
 
+/// A headless server confined to `base/in` (read), `base/out` (write) and `commands`.
 fn server(base: &Path, commands: Option<&str>) -> Server {
     let list = commands.map(|l| CommandAllowlist::parse(l).unwrap());
     let automation = Automation::new(Some(&base.join("in")), Some(&base.join("out")), list).unwrap().map(Arc::new);
     Server::new(Box::new(Headless::new().with_automation(automation)))
 }
 
+/// `p` as text, the way tools receive paths.
 fn s(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
@@ -46,18 +48,21 @@ fn call(server: &mut Server, name: &str, args: Value) -> (bool, String) {
     (r["isError"] == true, text)
 }
 
+/// `tools/call` that must succeed; returns its text.
 fn ok(server: &mut Server, name: &str, args: Value) -> String {
     let (err, text) = call(server, name, args.clone());
     assert!(!err, "{name} {args}: {text}");
     text
 }
 
+/// `tools/call` that must be refused with `needle` in the message.
 fn refused(server: &mut Server, name: &str, args: Value, needle: &str) {
     let (err, text) = call(server, name, args.clone());
     assert!(err, "{name} {args} should be refused: {text}");
     assert!(text.contains(needle), "{name}: expected `{needle}` in: {text}");
 }
 
+/// Files open only from the read root and save only into the write root, imports and exports too.
 #[test]
 fn files_open_and_save_only_inside_their_roots() {
     let base = folders("files");
@@ -90,6 +95,36 @@ fn files_open_and_save_only_inside_their_roots() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// The write root itself is not a file to save: its temporary sibling would land outside it.
+#[test]
+fn the_write_root_itself_is_not_a_destination() {
+    // A write root named like a file: saving to the root's own path would write the temporary
+    // sibling `out.csv.sctmp` next to the root, outside it, and its cleanup could delete a file
+    // already there. The save must be refused before anything is touched.
+    let base = std::env::temp_dir().join(format!("gc-mcp-auto-rootname-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = base.join("out.csv");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(base.join("out.csv.sctmp"), "keep me").unwrap();
+    let automation = Automation::new(Some(&root), Some(&root), None).unwrap().map(Arc::new);
+    let mut srv = Server::new(Box::new(Headless::new().with_automation(automation)));
+    ok(&mut srv, "write_range", json!({"range": "A1", "values": [["x"]]}));
+    refused(&mut srv, "save_workbook", json!({"path": s(&root)}), "automation path rejected");
+    refused(&mut srv, "execute_command", json!({"command": "file.saveAs", "params": {"path": s(&root)}}), "automation path rejected");
+    // The same folder spelled another way: refused too (here the format check may answer first).
+    for path in [root.join("."), root.join("sub").join("..")] {
+        assert!(call(&mut srv, "save_workbook", json!({"path": s(&path)})).0, "{path:?}");
+    }
+    assert_eq!(std::fs::read_to_string(base.join("out.csv.sctmp")).unwrap(), "keep me", "the sibling outside the root is untouched");
+    assert!(root.is_dir(), "the root is still a folder");
+    ok(&mut srv, "save_workbook", json!({"path": s(&root.join("book.csv"))}));
+    let mut names: Vec<_> = std::fs::read_dir(&base).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    names.sort();
+    assert_eq!(names, ["out.csv", "out.csv.sctmp"], "nothing new beside the root");
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Listed commands run, through any tool; the rest are refused.
 #[test]
 fn listed_commands_run_and_the_rest_are_refused() {
     let base = folders("commands");
@@ -106,6 +141,7 @@ fn listed_commands_run_and_the_rest_are_refused() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A tool built from several commands stops at the first one off the list.
 #[test]
 fn a_composite_tool_stops_at_the_first_command_off_the_list() {
     let base = folders("composite");
@@ -116,6 +152,7 @@ fn a_composite_tool_stops_at_the_first_command_off_the_list() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A stored script with a step off the list is refused before any step runs.
 #[test]
 fn a_script_is_not_a_way_around_the_list() {
     let base = folders("scripts");
@@ -135,6 +172,7 @@ fn a_script_is_not_a_way_around_the_list() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// `list_commands` shows only the commands on the list.
 #[test]
 fn list_commands_shows_only_what_may_run() {
     let base = folders("list");
@@ -147,6 +185,7 @@ fn list_commands_shows_only_what_may_run() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// Without automation the server is as it was: any file, any command.
 #[test]
 fn without_automation_nothing_changes() {
     let base = folders("none");

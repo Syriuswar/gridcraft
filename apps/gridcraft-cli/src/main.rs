@@ -673,6 +673,7 @@ mod tests {
         dir
     }
 
+    /// An `@FILE` list is read up to its limit; one byte more, non-UTF-8 text or a folder is refused.
     #[test]
     fn a_list_file_is_read_up_to_its_limit_and_no_further() {
         let dir = scratch("limit");
@@ -692,6 +693,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Devices and FIFOs are refused before they are opened; a link to a regular file still reads.
     #[cfg(unix)]
     #[test]
     fn streams_and_devices_are_refused_before_they_are_opened() {

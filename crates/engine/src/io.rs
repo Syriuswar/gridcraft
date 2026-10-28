@@ -609,6 +609,9 @@ fn script_sandbox_check(path: &str) -> Result<()> {
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_READ_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
+/// The bytes of the file at `path`: the one place a file is read from disk. Refused inside a
+/// script, and outside the read root while automation is confined ([`crate::automation`]); only a
+/// regular file is read, and no more than 2 GB.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_file(path: &str) -> Result<Vec<u8>> {
     use std::io::Read;
@@ -635,6 +638,9 @@ pub fn read_file(path: &str) -> Result<Vec<u8>> {
     Err(EngineError::Other(format!("{path}: no file system in the browser")))
 }
 
+/// Write `bytes` to `path`: the one place a file is written to disk. Refused inside a script, and
+/// outside the write root while automation is confined ([`crate::automation`]); written to a
+/// temporary sibling first, then renamed over `path`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
     use std::io::Write;

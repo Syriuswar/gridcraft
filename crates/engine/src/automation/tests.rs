@@ -13,10 +13,13 @@ fn folders(tag: &str) -> PathBuf {
     base
 }
 
+/// `p` as text, the way commands receive paths.
 fn s(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
+/// Reads stay in the read root and writes in the write root, however the path is spelled; the
+/// write root itself and folders are not files to write.
 #[test]
 fn reads_and_writes_stay_inside_their_roots() {
     let base = folders("roots");
@@ -32,14 +35,22 @@ fn reads_and_writes_stay_inside_their_roots() {
         (base.join("out/../in/x.xlsx"), Access::Write),
         (base.join("out/missing/../../outside/x.xlsx"), Access::Write),
         (base.join("outside/x.xlsx"), Access::Write),
+        // The root itself, and a folder inside it, are not files to write.
+        (base.join("out"), Access::Write),
+        (base.join("out/."), Access::Write),
+        (base.join("out/sub/.."), Access::Write),
     ] {
         let e = a.check_path(&s(&path), access).unwrap_err();
         assert!(e.contains("automation path rejected"), "{path:?}: {e}");
     }
     assert!(a.check_path("", Access::Read).is_err());
+    std::fs::create_dir_all(base.join("out/folder")).unwrap();
+    let e = a.check_path(&s(&base.join("out/folder")), Access::Write).unwrap_err();
+    assert!(e.contains("a folder is not a file to write"), "{e}");
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// With one root only, the other kind of access is refused outright.
 #[test]
 fn a_root_left_out_grants_none_of_its_access() {
     let base = folders("one-root");
@@ -51,6 +62,7 @@ fn a_root_left_out_grants_none_of_its_access() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A root must be an existing folder; with nothing asked, nothing is in force.
 #[test]
 fn roots_must_be_existing_folders() {
     let base = folders("bad-roots");
@@ -61,6 +73,7 @@ fn roots_must_be_existing_folders() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// Symbolic links that lead out of a root, to a file or a folder, are outside it.
 #[cfg(unix)]
 #[test]
 fn links_that_lead_out_are_outside() {
@@ -77,6 +90,7 @@ fn links_that_lead_out_are_outside() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// Windows: device names are refused and case does not make another folder.
 #[cfg(windows)]
 #[test]
 fn device_names_and_case() {
@@ -90,6 +104,8 @@ fn device_names_and_case() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// Lists take ids and `group.*` groups; unknown ids, bad patterns and empty or oversized lists are
+/// errors.
 #[test]
 fn command_lists_take_ids_and_groups_and_refuse_typos() {
     let l = CommandAllowlist::parse("cell.set, home.*\n# saving\nfile.save  # in place\n").unwrap();
@@ -102,6 +118,7 @@ fn command_lists_take_ids_and_groups_and_refuse_typos() {
     assert!(CommandAllowlist::parse(&"x".repeat(MAX_LIST_BYTES + 1)).is_err());
 }
 
+/// A thread scope holds only inside `confine` and ends with it.
 #[test]
 fn a_thread_scope_is_in_force_inside_confine_only() {
     let base = folders("scope");
@@ -121,6 +138,7 @@ fn a_thread_scope_is_in_force_inside_confine_only() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A command list alone leaves files as they were.
 #[test]
 fn commands_only_leave_files_unrestricted() {
     let a = Automation::new(None, None, Some(CommandAllowlist::parse("cell.set").unwrap())).unwrap().unwrap();

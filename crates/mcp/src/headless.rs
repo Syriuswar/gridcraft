@@ -44,6 +44,8 @@ impl Headless {
         self
     }
 
+    /// Answer one control-channel `method`. A command the client names (`engine.execute`, or a
+    /// command id as the method, such as `document.inspect`) must be on the command list in force.
     fn answer(&mut self, method: &str, params: Value) -> Result<Value, String> {
         match method {
             "ping" => Ok(json!("pong")),
@@ -81,11 +83,14 @@ impl Headless {
         }
     }
 
+    /// Run command `id` in `target` with no UI: programmatic calls never open dialogs.
     fn execute(&mut self, target: Target, id: &str, params: Value) -> Result<Value, String> {
         // Programmatic calls never open dialogs; anything a command queued for a UI is dropped.
         self.session.execute_headless_in(target, id, params).map_err(|e| e.to_string())
     }
 
+    /// The commands `engine.commands` lists (filtered by `search`): with a command list in force,
+    /// only those on it.
     fn commands(&self, params: &Value) -> Value {
         let q = params.get("search").and_then(Value::as_str).map(str::to_ascii_lowercase);
         let list: Vec<Value> = self
@@ -108,6 +113,8 @@ impl Headless {
 }
 
 impl Backend for Headless {
+    /// Answer one request with this server's automation (folders and commands) in force on the
+    /// calling thread, and the previous scope restored afterwards.
     fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let params = if params.is_null() { json!({}) } else { params };
         let scope = self.automation.clone();

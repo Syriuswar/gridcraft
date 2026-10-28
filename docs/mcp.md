@@ -46,8 +46,8 @@ gridcraft-cli mcp --automation-read-root ~/work/in --automation-write-root ~/wor
 
 - `--automation-read-root DIR`: workbooks, CSV imports and every other file a command reads must be inside `DIR`
   (`--in` too). `--automation-write-root DIR`: saves and exports must land inside `DIR`; a folder that doesn't
-  exist yet is fine. A root left out grants none of its access: with only a read root the agent can't write a
-  file at all. Paths are resolved before they are checked: `..`, symbolic links and junctions that lead out are
+  exist yet is fine, but the write root itself and a folder are not files to write. A root left out grants none
+  of its access: with only a read root the agent can't write a file at all. Paths are resolved before they are checked: `..`, symbolic links and junctions that lead out are
   refused, and so are Windows device names (`NUL`, `COM1`…). Case is ignored on Windows.
 - `--allow-commands LIST`: only the commands listed may run, by id (`home.bold`) or group (`home.*`), separated by
   commas, spaces or new lines; `#` starts a comment. `@FILE` reads the list from a file, which must be a
