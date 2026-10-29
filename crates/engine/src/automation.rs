@@ -7,8 +7,9 @@
 //! - every file [`crate::io::read_file`] opens must lie inside the **read root**, and every file
 //!   [`crate::io::write_file`] writes inside the **write root**. Those two functions are the only
 //!   way the engine reaches files (open, import, `data.getData`, templates, save, export…), so no
-//!   command can go around them. A root left out grants none of its access: with only a read
-//!   root, nothing can be written.
+//!   command can go around them. With one root given, the access the other would grant is
+//!   denied: with only a read root, nothing can be written. With neither root, files are not
+//!   confined (a command list alone confines commands only).
 //! - every command a client asks for, and every step of a stored script, must be on the command
 //!   list. Commands a command runs itself are part of the allowed command and aren't checked
 //!   again. Without a list, every command may run.
@@ -108,8 +109,9 @@ pub struct Automation {
 }
 
 impl Automation {
-    /// Confine files to `read` and `write` (existing folders; a root left out grants none of its
-    /// access) and, with `commands`, commands to that list. Neither root nor list: `None`.
+    /// Confine files to `read` and `write` (existing folders; with one root given, the access the
+    /// other would grant is denied, and with neither, files are not confined) and, with
+    /// `commands`, commands to that list. Neither root nor list: `None`.
     pub fn new(read: Option<&Path>, write: Option<&Path>, commands: Option<CommandAllowlist>) -> std::result::Result<Option<Self>, String> {
         let root = |p: Option<&Path>, kind: &str| -> std::result::Result<Option<PathBuf>, String> {
             match p {
@@ -132,12 +134,14 @@ impl Automation {
         Ok(Some(Self { read_root, write_root, confined, commands }))
     }
 
-    /// The folder files may be read from, resolved; `None`: no reading at all.
+    /// The folder files may be read from, resolved. `None` refuses every read only while file
+    /// confinement is in force (a write root was given); with neither root, files are not confined.
     pub fn read_root(&self) -> Option<&Path> {
         self.read_root.as_deref()
     }
 
-    /// The folder files may be written to, resolved; `None`: no writing at all.
+    /// The folder files may be written to, resolved. `None` refuses every write only while file
+    /// confinement is in force (a read root was given); with neither root, files are not confined.
     pub fn write_root(&self) -> Option<&Path> {
         self.write_root.as_deref()
     }

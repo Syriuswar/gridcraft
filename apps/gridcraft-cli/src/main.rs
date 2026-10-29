@@ -50,8 +50,9 @@ const USAGE: &str = "usage:
   gridcraft-cli functions [--json] [--search X] [--category C]
   gridcraft-cli mcp [--connect PORT] [--in FILE | --sample NAME] [--automation-read-root DIR]
                     [--automation-write-root DIR] [--allow-commands LIST|@FILE]
-                     the roots confine the files the agent's commands read and write; a root
-                     left out grants none of its access. --allow-commands holds the agent to
+                     the roots confine the files the agent's commands read and write; with
+                     one root given, the access the other would grant is denied, and with
+                     neither, files are not confined. --allow-commands holds the agent to
                      the commands listed (ids like home.bold, groups like home.*, or @FILE);
                      scripts are held to it too. All three confine the headless server only
                      and are an error with --connect
